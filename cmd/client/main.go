@@ -38,7 +38,6 @@ func main() {
 
 	state := gamelogic.NewGameState(name)
 
-	quit := false
 	for {
 		cmds := gamelogic.GetInput()
 		if len(cmds) == 0 {
@@ -49,35 +48,25 @@ func main() {
 		case "spawn":
 			if err = state.CommandSpawn(cmds); err != nil {
 				log.Println(err)
+				continue
 			}
-			break
 		case "move":
 			_, err := state.CommandMove(cmds)
 			if err != nil {
 				log.Println(err)
+				continue
 			}
-			break
 		case "status":
 			state.CommandStatus()
-			break
 		case "help":
 			gamelogic.PrintClientHelp()
-			break
 		case "spam":
 			fmt.Println("Spamming not allowed yet!")
 		case "quit":
 			gamelogic.PrintQuit()
-			quit = true
-			break
+			return
 		default:
 			fmt.Printf("unknown command '%s'\n", cmds[0])
-			continue
-		}
-
-		if quit {
-			break
 		}
 	}
-
-	log.Println("Shutting down Peril client")
 }
