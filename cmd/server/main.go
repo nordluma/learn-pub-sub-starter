@@ -34,7 +34,6 @@ func main() {
 
 	gamelogic.PrintServerHelp()
 
-	quit := false
 	for {
 		cmds := gamelogic.GetInput()
 		if len(cmds) == 0 {
@@ -51,8 +50,8 @@ func main() {
 				routing.PlayingState{IsPaused: true},
 			); err != nil {
 				log.Fatal(err)
+				continue
 			}
-			break
 		case "resume":
 			fmt.Println("sending resume message")
 			if err = pubsub.PublishJSON(
@@ -62,20 +61,14 @@ func main() {
 				routing.PlayingState{IsPaused: false},
 			); err != nil {
 				log.Fatal(err)
+				continue
 			}
-			break
 		case "quit":
 			fmt.Println("exiting game")
-			quit = true
-			break
+			return
 		default:
 			fmt.Printf("unknown command '%s'\n", cmds[0])
 		}
 
-		if quit {
-			break
-		}
 	}
-
-	log.Println("Shutting down Peril server")
 }
