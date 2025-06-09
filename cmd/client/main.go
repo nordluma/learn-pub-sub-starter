@@ -17,6 +17,13 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
 	}
 }
 
+func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) {
+	return func(mv gamelogic.ArmyMove) {
+		defer fmt.Print("> ")
+		gs.HandleMove(mv)
+	}
+}
+
 func main() {
 	fmt.Println("Starting Peril client...")
 	connStr := "amqp://guest:guest@localhost:5672/"
@@ -27,7 +34,7 @@ func main() {
 	defer conn.Close()
 	log.Println("Connected to RabbitMQ")
 
-	name, err := gamelogic.ClientWelcome()
+	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,7 +42,7 @@ func main() {
 	_, _, err = pubsub.DeclareAndBind(
 		conn,
 		routing.ExchangePerilDirect,
-		fmt.Sprintf("%s.%s", routing.PauseKey, name),
+		fmt.Sprintf("%s.%s", routing.PauseKey, username),
 		routing.PauseKey,
 		pubsub.TransientQueue,
 	)
@@ -43,15 +50,37 @@ func main() {
 		log.Fatal(err)
 	}
 
-	gameState := gamelogic.NewGameState(name)
+	gameState := gamelogic.NewGameState(username)
 
 	if err = pubsub.SubscribeJSON(
 		conn,
 		routing.ExchangePerilDirect,
-		fmt.Sprintf("%s.%s", routing.PauseKey, name),
+		fmt.Sprintf("%s.%s", routing.PauseKey, username),
 		routing.PauseKey,
 		pubsub.TransientQueue,
 		handlerPause(gameState),
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	ch, _, err := pubsub.DeclareAndBind(
+		conn,
+		routing.ExchangePerilTopic,
+		fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username),
+		fmt.Sprintf("%s.*", routing.ArmyMovesPrefix),
+		pubsub.TransientQueue,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username),
+		fmt.Sprintf("%s.*", routing.ArmyMovesPrefix),
+		pubsub.TransientQueue,
+		handlerMove(gameState),
 	); err != nil {
 		log.Fatal(err)
 	}
@@ -69,11 +98,23 @@ func main() {
 				continue
 			}
 		case "move":
-			_, err := gameState.CommandMove(cmds)
+			move, err := gameState.CommandMove(cmds)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+
+			if err = pubsub.PublishJSON(
+				ch,
+				routing.ExchangePerilTopic,
+				fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username),
+				move,
+			); err != nil {
+				log.Println(err)
+				continue
+			}
+
+			log.Println("move published successfully")
 		case "status":
 			gameState.CommandStatus()
 		case "help":
