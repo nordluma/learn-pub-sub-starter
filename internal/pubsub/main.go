@@ -8,8 +8,10 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type SimpleQueueType uint
+
 const (
-	DurableQueue int = iota
+	DurableQueue SimpleQueueType = iota
 	TransientQueue
 )
 
@@ -24,7 +26,7 @@ const (
 func DeclareAndBind(
 	conn *amqp.Connection,
 	exchange, queueName, key string,
-	simpleQueueType int, // enum to represent `durable` or `transient`
+	simpleQueueType SimpleQueueType, // enum to represent `durable` or `transient`
 ) (*amqp.Channel, amqp.Queue, error) {
 	durable, autoDelete, exclusive := false, false, false
 	if simpleQueueType == DurableQueue {
@@ -61,7 +63,7 @@ func DeclareAndBind(
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange, queueName, key string,
-	simpleQueueType int,
+	simpleQueueType SimpleQueueType,
 	handler func(T) AckType,
 ) error {
 	ch, queue, err := DeclareAndBind(
