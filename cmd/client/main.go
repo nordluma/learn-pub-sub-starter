@@ -52,18 +52,12 @@ func main() {
 	defer conn.Close()
 	log.Println("Connected to RabbitMQ")
 
-	username, err := gamelogic.ClientWelcome()
+	ch, err := conn.Channel()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
-		conn,
-		routing.ExchangePerilDirect,
-		fmt.Sprintf("%s.%s", routing.PauseKey, username),
-		routing.PauseKey,
-		pubsub.TransientQueue,
-	)
+	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,17 +72,6 @@ func main() {
 		pubsub.TransientQueue,
 		handlerPause(gameState),
 	); err != nil {
-		log.Fatal(err)
-	}
-
-	ch, _, err := pubsub.DeclareAndBind(
-		conn,
-		routing.ExchangePerilTopic,
-		fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username),
-		fmt.Sprintf("%s.*", routing.ArmyMovesPrefix),
-		pubsub.TransientQueue,
-	)
-	if err != nil {
 		log.Fatal(err)
 	}
 
