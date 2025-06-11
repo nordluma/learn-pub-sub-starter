@@ -49,7 +49,7 @@ func handlerMove(
 				return pubsub.NackRequeue
 			}
 
-			return pubsub.NackRequeue
+			return pubsub.Ack
 		case gamelogic.MoveOutcomeSamePlayer:
 			return pubsub.NackDiscard
 		default:
