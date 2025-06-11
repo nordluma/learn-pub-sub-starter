@@ -22,7 +22,7 @@ func handlerPause(
 }
 
 func handlerMove(
-	gs *gamelogic.GameState,
+	gs *gamelogic.GameState, ch *amqp.Channel,
 ) func(gamelogic.ArmyMove) pubsub.AckType {
 	return func(mv gamelogic.ArmyMove) pubsub.AckType {
 		defer fmt.Print("> ")
@@ -32,11 +32,52 @@ func handlerMove(
 		case gamelogic.MoveOutComeSafe:
 			return pubsub.Ack
 		case gamelogic.MoveOutcomeMakeWar:
-			return pubsub.Ack
+			if err := pubsub.PublishJSON(
+				ch,
+				routing.ExchangePerilTopic,
+				fmt.Sprintf(
+					"%s.%s",
+					routing.WarRecognitionsPrefix,
+					gs.GetUsername(),
+				),
+				gamelogic.RecognitionOfWar{
+					Attacker: mv.Player,
+					Defender: gs.GetPlayerSnap(),
+				},
+			); err != nil {
+				log.Printf("error: %s", err)
+				return pubsub.NackRequeue
+			}
+
+			return pubsub.NackRequeue
 		case gamelogic.MoveOutcomeSamePlayer:
 			return pubsub.NackDiscard
 		default:
 			log.Printf("unknown move '%v'", moveOutcome)
+			return pubsub.NackDiscard
+		}
+	}
+}
+
+func handlerWar(
+	gs *gamelogic.GameState,
+) func(gamelogic.RecognitionOfWar) pubsub.AckType {
+	return func(row gamelogic.RecognitionOfWar) pubsub.AckType {
+		defer fmt.Print("> ")
+		outcome, _, _ := gs.HandleWar(row)
+		switch outcome {
+		case gamelogic.WarOutcomeNotInvolved:
+			return pubsub.NackRequeue
+		case gamelogic.WarOutcomeNoUnits:
+			return pubsub.NackDiscard
+		case gamelogic.WarOutcomeOpponentWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeYouWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeDraw:
+			return pubsub.Ack
+		default:
+			log.Printf("unknown war outcome '%v'", outcome)
 			return pubsub.NackDiscard
 		}
 	}
@@ -81,7 +122,18 @@ func main() {
 		fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username),
 		fmt.Sprintf("%s.*", routing.ArmyMovesPrefix),
 		pubsub.TransientQueue,
-		handlerMove(gameState),
+		handlerMove(gameState, ch),
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	if err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix),
+		pubsub.DurableQueue,
+		handlerWar(gameState),
 	); err != nil {
 		log.Fatal(err)
 	}
