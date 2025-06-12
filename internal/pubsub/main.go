@@ -68,6 +68,72 @@ func SubscribeJSON[T any](
 	simpleQueueType SimpleQueueType,
 	handler func(T) AckType,
 ) error {
+	if err := subscribe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType,
+		handler,
+		unMarshallJSON,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func unMarshallJSON[T any](b []byte) (T, error) {
+	var body T
+	buffer := bytes.NewBuffer(b)
+	enc := json.NewDecoder(buffer)
+	if err := enc.Decode(&body); err != nil {
+		return body, err
+	}
+
+	return body, nil
+}
+
+func SubscribeGOB[T any](
+	conn *amqp.Connection,
+	exchange, queueName, key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	if err := subscribe(
+		conn,
+		exchange,
+		queueName,
+		key,
+		simpleQueueType,
+		handler,
+		unMarshallGob,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func unMarshallGob[T any](b []byte) (T, error) {
+	var body T
+
+	buffer := bytes.NewBuffer(b)
+	enc := gob.NewDecoder(buffer)
+	if err := enc.Decode(&body); err != nil {
+		return body, err
+	}
+
+	return body, nil
+}
+
+func subscribe[T any](
+	conn *amqp.Connection,
+	exchange, queueName, key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+	unMarshaller func([]byte) (T, error),
+) error {
 	ch, queue, err := DeclareAndBind(
 		conn,
 		exchange,
@@ -94,8 +160,8 @@ func SubscribeJSON[T any](
 
 	go func() {
 		for delivery := range deliveryCh {
-			var body T
-			if err = json.Unmarshal(delivery.Body, &body); err != nil {
+			body, err := unMarshaller(delivery.Body)
+			if err != nil {
 				log.Println(err)
 				continue
 			}
@@ -119,7 +185,6 @@ func SubscribeJSON[T any](
 			}
 		}
 	}()
-
 	return nil
 }
 
