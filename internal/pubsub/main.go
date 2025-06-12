@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"log"
 
@@ -98,10 +100,7 @@ func SubscribeJSON[T any](
 				continue
 			}
 
-			acktype := handler(body)
-			log.Println(acktype)
-
-			switch acktype {
+			switch handler(body) {
 			case Ack:
 				if err = delivery.Ack(false); err != nil {
 					log.Println(err)
@@ -142,6 +141,30 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 		},
 	)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var b bytes.Buffer
+	enc := gob.NewEncoder(&b)
+	if err := enc.Encode(val); err != nil {
+		return err
+	}
+
+	if err := ch.PublishWithContext(
+		context.Background(),
+		exchange,
+		key,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/gob",
+			Body:        b.Bytes(),
+		},
+	); err != nil {
 		return err
 	}
 
