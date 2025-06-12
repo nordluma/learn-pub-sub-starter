@@ -13,6 +13,15 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+func handlerLog(gl routing.GameLog) pubsub.AckType {
+	defer fmt.Print("> ")
+	if err := gamelogic.WriteLog(gl); err != nil {
+		return pubsub.NackDiscard
+	}
+
+	return pubsub.Ack
+}
+
 func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -40,6 +49,17 @@ func main() {
 		pubsub.DurableQueue,
 	)
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err = pubsub.SubscribeGOB(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		fmt.Sprintf("%s.*", routing.GameLogSlug),
+		pubsub.DurableQueue,
+		handlerLog,
+	); err != nil {
 		log.Fatal(err)
 	}
 
