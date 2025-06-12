@@ -145,6 +145,10 @@ func subscribe[T any](
 		return err
 	}
 
+	if err = ch.Qos(10, 0, false); err != nil {
+		return err
+	}
+
 	deliveryCh, err := ch.Consume(
 		queue.Name,
 		"",
